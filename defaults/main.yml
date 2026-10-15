@@ -1,12 +1,18 @@
 ---
 # Merged with the inventory variable `network` into `network_final`.
 network_defaults:
+  # static hostname (hostnamectl); "" = leave it as it is
+  hostname: "{{ inventory_hostname_short }}"
   firewalld:
     # "" = leave the default zone as it is; e.g. drop: networks without a managed connection get nothing in
     default_zone: ""
     # desired state per listed zone: exactly these services (missing ones added, others removed);
     # zones not listed here are not touched (e.g. libvirt with nfs from ansible-role-nfsserver)
     zones: {}
+    # warn (the run continues) about listed zones that nothing uses right now: not the default zone, no managed
+    # connection, no interfaces/sources - for debugging or the first run after bigger network changes; off by
+    # default because zones are often empty for a while (libvirt networks not started, on the road with a VPN)
+    warn_unused_zones: false
   # MAC address for all Ethernet and Wi-Fi connections (NetworkManager conf.d), usually the laptop's Wi-Fi MAC:
   # LAN and Wi-Fi get the same DHCP reservation/IP; "" = no such file
   same_mac: ""
@@ -21,5 +27,13 @@ network_defaults:
   #     key_mgmt: sae            # sae (WPA3) or wpa-psk (WPA2)
   #     psk: "{{ vault_... }}"
   #     zone: work
+  #   - id: rescue-router-default  # static IPv4 next to dhcp, e.g. for the router's network after a factory reset
+  #     type: ethernet
+  #     zone: work
+  #     autoconnect: false         # default true; false = only by hand (nmcli connection up <id>)
+  #     ipv4:                      # no ipv4 = DHCP; IPv6 stays automatic
+  #       addresses: [192.168.1.10/24]   # one or more, ip/prefix
+  #       gateway: 192.168.1.1           # optional
+  #       dns: [192.168.1.1]             # optional
   connections: []
   packages: [NetworkManager, firewalld]

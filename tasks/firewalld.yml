@@ -61,13 +61,15 @@
     - network_default_zone.stdout | trim != network_final.firewalld.default_zone
 
 # a listed zone is in use if it is the default zone, a managed connection uses it or it has interfaces/sources
-# right now (e.g. libvirt's virbr* bridges in zone libvirt); otherwise only a warning, the run continues
+# right now (e.g. libvirt's virbr* bridges in zone libvirt); otherwise only a warning, the run continues;
+# only with firewalld.warn_unused_zones
 - name: Interfaces and sources of the listed zones
   ansible.builtin.command: firewall-cmd --zone={{ item }} --list-all
   register: network_zone_usage
   changed_when: false
   check_mode: false
   loop: "{{ network_final.firewalld.zones.keys() | list }}"
+  when: network_final.firewalld.warn_unused_zones
 
 - name: Warning for configured zones that nothing uses
   ansible.builtin.assert:
@@ -82,4 +84,5 @@
   loop: "{{ network_zone_usage.results }}"
   loop_control:
     label: "{{ item.item }}"
+  when: network_final.firewalld.warn_unused_zones
   ignore_errors: true

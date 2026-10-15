@@ -32,6 +32,12 @@
     fail_msg: "network: same_mac '{{ network_final.same_mac }}' is not a MAC address like aa:bb:cc:dd:ee:ff"
     quiet: true
 
+- name: Assert hostname
+  ansible.builtin.assert:
+    that: network_final.hostname == '' or network_final.hostname is match('^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}$')
+    fail_msg: "network: hostname '{{ network_final.hostname }}' is not a valid short hostname (letters, digits, -)"
+    quiet: true
+
 - name: Assert connections (id unique, type, zone, Wi-Fi with key_mgmt and psk)
   ansible.builtin.assert:
     that:
@@ -48,6 +54,31 @@
   loop: "{{ network_ids }}"
   vars:
     network_connection: "{{ network_final.connections | selectattr('id', 'equalto', item) | first }}"
+
+- name: Assert autoconnect and static IPv4 (addresses ip/prefix, gateway and dns ip)
+  ansible.builtin.assert:
+    that:
+      - network_connection.autoconnect | default(true) is boolean
+      - network_connection.ipv4 is not defined or network_connection.ipv4.addresses | default([]) | length > 0
+      - network_connection.ipv4 is not defined or network_connection.ipv4.addresses | default([])
+        | reject('match', network_cidr_regex) | list | length == 0
+      - network_connection.ipv4 is not defined or network_connection.ipv4.gateway | default('') == ''
+        or network_connection.ipv4.gateway is match(network_ip_regex)
+      - network_connection.ipv4 is not defined or network_connection.ipv4.dns | default([])
+        | reject('match', network_ip_regex) | list | length == 0
+    fail_msg: >-
+      network: connection '{{ item }}': autoconnect must be true/false; ipv4 needs addresses like 192.168.1.10/24,
+      gateway and dns entries like 192.168.1.1
+    quiet: true
+  loop: "{{ network_ids }}"
+  vars:
+    network_connection: "{{ network_final.connections | selectattr('id', 'equalto', item) | first }}"
+
+- name: Static hostname {{ network_final.hostname }}
+  ansible.builtin.hostname:
+    name: "{{ network_final.hostname }}"
+    use: systemd
+  when: network_final.hostname | length > 0
 
 - name: Install packages
   ansible.builtin.package:

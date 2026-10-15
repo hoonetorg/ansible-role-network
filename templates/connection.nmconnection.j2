@@ -4,6 +4,7 @@ id={{ network_connection.id }}
 uuid={{ ('network-' ~ network_connection.id) | to_uuid }}
 type={{ network_connection.type }}
 zone={{ network_connection.zone }}
+autoconnect={{ network_connection.autoconnect | default(true) | ternary('true', 'false') }}
 
 {% if network_connection.type == 'ethernet' %}
 [ethernet]
@@ -21,7 +22,17 @@ psk={{ network_connection.psk }}
 
 {% endif %}
 [ipv4]
+{% if network_connection.ipv4 is defined %}
+{% for address in network_connection.ipv4.addresses %}
+address{{ loop.index }}={{ address }}{{ (',' ~ network_connection.ipv4.gateway) if loop.first and network_connection.ipv4.gateway | default('') else '' }}
+{% endfor %}
+{% if network_connection.ipv4.dns | default([]) | length > 0 %}
+dns={{ network_connection.ipv4.dns | join(';') }};
+{% endif %}
+method=manual
+{% else %}
 method=auto
+{% endif %}
 
 [ipv6]
 addr-gen-mode=default
