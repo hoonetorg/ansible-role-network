@@ -14,7 +14,8 @@ switching between cable and Wi-Fi (or using both) is seamless.
 3. one profile per entry in `connections` → `/etc/NetworkManager/system-connections/ansible-<id>.nmconnection`
    (root, 0600, stable uuid from the id): Ethernet without interface binding (any cable or dock), Wi-Fi with the
    password in the file (system-wide, also before login), `cloned-mac-address=permanent`, no MAC randomization.
-   Wi-Fi files are written without output/diff (password). IPv4 by DHCP or static (`ipv4`), IPv6 automatic;
+   Wi-Fi files are written without output/diff (password); the merged configuration (`network_final`, it holds
+   the passwords) is not logged either. IPv4 by DHCP or static (`ipv4`), IPv6 automatic;
    `autoconnect=true|false` is always written. DHCP and static profiles live side by side: e.g. `dhcp` connects
    automatically, rescue profiles with `autoconnect: false` are started by hand (`nmcli connection up <id>`) when
    the router's DHCP is broken or the router is back to factory defaults.

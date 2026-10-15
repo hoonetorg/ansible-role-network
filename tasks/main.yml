@@ -10,9 +10,11 @@
     quiet: true
   ignore_errors: true
 
+# no_log: the result contains the Wi-Fi psks (set_fact results go to the per-host log of log_plays and to -v output)
 - name: Build final network configuration
   ansible.builtin.set_fact:
     network_final: "{{ network_defaults | combine(network | default({}), recursive=True) }}"
+  no_log: true
 
 # loop items carry only the id, never the psk (see the playbook README: secrets in output and logs)
 - name: Connection ids
