@@ -1,0 +1,25 @@
+---
+# Merged with the inventory variable `network` into `network_final`.
+network_defaults:
+  firewalld:
+    # "" = leave the default zone as it is; e.g. drop: networks without a managed connection get nothing in
+    default_zone: ""
+    # desired state per listed zone: exactly these services (missing ones added, others removed);
+    # zones not listed here are not touched (e.g. libvirt with nfs from ansible-role-nfsserver)
+    zones: {}
+  # MAC address for all Ethernet and Wi-Fi connections (NetworkManager conf.d), usually the laptop's Wi-Fi MAC:
+  # LAN and Wi-Fi get the same DHCP reservation/IP; "" = no such file
+  same_mac: ""
+  # NetworkManager profiles written by the role (/etc/NetworkManager/system-connections/ansible-<id>.nmconnection);
+  # other profiles are not touched
+  #   - id: dhcp                 # ethernet without interface binding: any cable/dock
+  #     type: ethernet
+  #     zone: work
+  #   - id: MyWifi
+  #     type: wifi
+  #     ssid: MyWifi             # default: id
+  #     key_mgmt: sae            # sae (WPA3) or wpa-psk (WPA2)
+  #     psk: "{{ vault_... }}"
+  #     zone: work
+  connections: []
+  packages: [NetworkManager, firewalld]

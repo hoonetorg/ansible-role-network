@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+# same MAC for all Ethernet and Wi-Fi connections: LAN and Wi-Fi get the same DHCP reservation/IP
+[connection.99-sameMAC]
+ethernet.cloned-mac-address={{ network_final.same_mac }}
+wifi.cloned-mac-address={{ network_final.same_mac }}

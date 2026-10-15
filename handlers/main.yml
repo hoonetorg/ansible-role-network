@@ -1,0 +1,12 @@
+---
+# load changed profiles; active connections keep running with their old settings until they are reconnected
+- name: network reload connections
+  ansible.builtin.command: nmcli connection reload
+  changed_when: true
+  when: network_nm_running
+
+# conf.d (same MAC) applies to connections activated afterwards
+- name: network reload config
+  ansible.builtin.command: nmcli general reload conf
+  changed_when: true
+  when: network_nm_running

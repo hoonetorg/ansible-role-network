@@ -1,0 +1,75 @@
+---
+# warnings: a failing assert with ignore_errors is shown even with display_ok_hosts=false (counted as "ignored"),
+# the run continues
+- name: Warning if the inventory variable network is not defined
+  ansible.builtin.assert:
+    that: network is defined
+    fail_msg: >-
+      WARNING network: the variable 'network' is not defined for this host - the role runs with its defaults (no
+      zones, no default zone, no profiles); check group_vars/host_vars
+    quiet: true
+  ignore_errors: true
+
+- name: Build final network configuration
+  ansible.builtin.set_fact:
+    network_final: "{{ network_defaults | combine(network | default({}), recursive=True) }}"
+
+# loop items carry only the id, never the psk (see the playbook README: secrets in output and logs)
+- name: Connection ids
+  ansible.builtin.set_fact:
+    network_ids: "{{ network_final.connections | map(attribute='id') | list }}"
+    network_wifi_ids: "{{ network_final.connections | selectattr('type', 'equalto', 'wifi') | map(attribute='id') | list }}"
+
+- name: Only openSUSE is supported
+  ansible.builtin.assert:
+    that: ansible_facts['os_family'] == 'Suse'
+    fail_msg: "network: only openSUSE is implemented, not {{ ansible_facts['distribution'] }}"
+    quiet: true
+
+- name: Assert same_mac
+  ansible.builtin.assert:
+    that: network_final.same_mac == '' or network_final.same_mac is match('^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$')
+    fail_msg: "network: same_mac '{{ network_final.same_mac }}' is not a MAC address like aa:bb:cc:dd:ee:ff"
+    quiet: true
+
+- name: Assert connections (id unique, type, zone, Wi-Fi with key_mgmt and psk)
+  ansible.builtin.assert:
+    that:
+      - network_ids | unique | length == network_ids | length
+      - network_connection.id is string and network_connection.id | length > 0
+      - network_connection.type in network_connection_types
+      - network_connection.zone | default('') | length > 0
+      - network_connection.type != 'wifi' or network_connection.key_mgmt | default('') in network_wifi_key_mgmt
+      - network_connection.type != 'wifi' or network_connection.psk | default('') | length >= 8
+    fail_msg: >-
+      network: connection '{{ item }}' needs a unique id, type ({{ network_connection_types | join('/') }}), zone and
+      for Wi-Fi key_mgmt ({{ network_wifi_key_mgmt | join('/') }}) and a psk of 8+ characters
+    quiet: true
+  loop: "{{ network_ids }}"
+  vars:
+    network_connection: "{{ network_final.connections | selectattr('id', 'equalto', item) | first }}"
+
+- name: Install packages
+  ansible.builtin.package:
+    name: "{{ network_final.packages }}"
+    state: present
+
+- name: Gather service facts
+  ansible.builtin.service_facts:
+
+- name: Services running
+  ansible.builtin.set_fact:
+    network_firewalld_running: "{{ ansible_facts.services['firewalld.service'].state | default('') == 'running' }}"
+    network_nm_running: "{{ ansible_facts.services['NetworkManager.service'].state | default('') == 'running' }}"
+
+- name: Firewalld
+  ansible.builtin.include_tasks: firewalld.yml
+  when: network_firewalld_running
+
+- name: Firewalld not running - zones and default zone not applied
+  ansible.builtin.debug:
+    msg: "network: firewalld is not running, the firewalld settings were skipped"
+  when: not network_firewalld_running
+
+- name: NetworkManager
+  ansible.builtin.include_tasks: networkmanager.yml

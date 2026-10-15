@@ -1,0 +1,11 @@
+galaxy_info:
+  author: hoonetorg
+  description: NetworkManager profiles (LAN/Wi-Fi, same MAC) and firewalld zones from the inventory
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+  platforms:
+    - name: opensuse
+      versions: [all]
+  galaxy_tags: [network, networkmanager, firewalld, wifi, desktop]
+
+dependencies: []

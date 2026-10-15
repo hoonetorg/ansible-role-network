@@ -1,0 +1,85 @@
+---
+- name: Existing firewalld zones
+  ansible.builtin.command: firewall-cmd --permanent --get-zones
+  register: network_zones_existing
+  changed_when: false
+  check_mode: false
+
+- name: Assert zones exist (listed zones and the zones of the connections)
+  ansible.builtin.assert:
+    that: network_zones_wanted | difference(network_zones_existing.stdout.split()) | length == 0
+    fail_msg: "network: firewalld zone(s) {{ network_zones_wanted | difference(network_zones_existing.stdout.split()) }} don't exist"
+    quiet: true
+  vars:
+    network_zones_wanted: >-
+      {{ (network_final.firewalld.zones.keys() | list + network_final.connections | map(attribute='zone') | list
+      + ([network_final.firewalld.default_zone] if network_final.firewalld.default_zone else [])) | unique }}
+
+- name: Current services of the listed zones
+  ansible.builtin.command: firewall-cmd --permanent --zone={{ item }} --list-services
+  register: network_zone_services
+  changed_when: false
+  check_mode: false
+  loop: "{{ network_final.firewalld.zones.keys() | list }}"
+
+# desired state: add the missing services, remove the ones not listed
+- name: Zone services
+  ansible.posix.firewalld:
+    zone: "{{ item.zone }}"
+    service: "{{ item.service }}"
+    state: "{{ item.state }}"
+    permanent: true
+    immediate: true
+  loop: >-
+    {%- set result = [] -%}
+    {%- for r in network_zone_services.results -%}
+      {%- set wanted = network_final.firewalld.zones[r.item].services | default([]) -%}
+      {%- set current = r.stdout.split() -%}
+      {%- for s in wanted | difference(current) -%}
+        {%- set _ = result.append({'zone': r.item, 'service': s, 'state': 'enabled'}) -%}
+      {%- endfor -%}
+      {%- for s in current | difference(wanted) -%}
+        {%- set _ = result.append({'zone': r.item, 'service': s, 'state': 'disabled'}) -%}
+      {%- endfor -%}
+    {%- endfor -%}
+    {{ result }}
+  loop_control:
+    label: "{{ item.zone }}: {{ item.service }} {{ item.state }}"
+
+- name: Current default zone
+  ansible.builtin.command: firewall-cmd --get-default-zone
+  register: network_default_zone
+  changed_when: false
+  check_mode: false
+
+# runtime and permanent; interfaces without a zone of their own move to it at once
+- name: Default zone {{ network_final.firewalld.default_zone }}
+  ansible.builtin.command: firewall-cmd --set-default-zone={{ network_final.firewalld.default_zone }}
+  changed_when: true
+  when:
+    - network_final.firewalld.default_zone | length > 0
+    - network_default_zone.stdout | trim != network_final.firewalld.default_zone
+
+# a listed zone is in use if it is the default zone, a managed connection uses it or it has interfaces/sources
+# right now (e.g. libvirt's virbr* bridges in zone libvirt); otherwise only a warning, the run continues
+- name: Interfaces and sources of the listed zones
+  ansible.builtin.command: firewall-cmd --zone={{ item }} --list-all
+  register: network_zone_usage
+  changed_when: false
+  check_mode: false
+  loop: "{{ network_final.firewalld.zones.keys() | list }}"
+
+- name: Warning for configured zones that nothing uses
+  ansible.builtin.assert:
+    that: >-
+      item.item == (network_final.firewalld.default_zone or network_default_zone.stdout | trim)
+      or item.item in (network_final.connections | map(attribute='zone') | list)
+      or item.stdout is search('^\\s*(interfaces|sources):[ \\t]*\\S', multiline=True)
+    fail_msg: >-
+      WARNING network: zone '{{ item.item }}' is configured but not used (not the default zone, no managed
+      connection, no interfaces/sources) - its services have no effect
+    quiet: true
+  loop: "{{ network_zone_usage.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  ignore_errors: true

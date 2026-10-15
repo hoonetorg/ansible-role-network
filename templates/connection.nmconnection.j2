@@ -1,0 +1,30 @@
+# {{ ansible_managed }}
+[connection]
+id={{ network_connection.id }}
+uuid={{ ('network-' ~ network_connection.id) | to_uuid }}
+type={{ network_connection.type }}
+zone={{ network_connection.zone }}
+
+{% if network_connection.type == 'ethernet' %}
+[ethernet]
+
+{% elif network_connection.type == 'wifi' %}
+[wifi]
+cloned-mac-address=permanent
+mac-address-randomization=1
+mode=infrastructure
+ssid={{ network_connection.ssid | default(network_connection.id) }}
+
+[wifi-security]
+key-mgmt={{ network_connection.key_mgmt }}
+psk={{ network_connection.psk }}
+
+{% endif %}
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=auto
+
+[proxy]

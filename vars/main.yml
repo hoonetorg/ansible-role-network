@@ -1,0 +1,5 @@
+---
+network_connections_dir: /etc/NetworkManager/system-connections
+network_same_mac_file: /etc/NetworkManager/conf.d/99-sameMAC.conf
+network_connection_types: [ethernet, wifi]
+network_wifi_key_mgmt: [sae, wpa-psk]

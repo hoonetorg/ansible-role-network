@@ -1,0 +1,71 @@
+---
+- name: Same MAC for Ethernet and Wi-Fi
+  ansible.builtin.template:
+    src: same-mac.conf.j2
+    dest: "{{ network_same_mac_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: network_final.same_mac | length > 0
+  notify: network reload config
+
+- name: No same-MAC file
+  ansible.builtin.file:
+    path: "{{ network_same_mac_file }}"
+    state: absent
+  when: network_final.same_mac | length == 0
+  notify: network reload config
+
+- name: Ethernet profiles
+  ansible.builtin.template:
+    src: connection.nmconnection.j2
+    dest: "{{ network_connections_dir }}/ansible-{{ item | regex_replace('[^A-Za-z0-9._-]', '_') }}.nmconnection"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ network_ids | difference(network_wifi_ids) }}"
+  vars:
+    network_connection: "{{ network_final.connections | selectattr('id', 'equalto', item) | first }}"
+  notify: network reload connections
+
+# the files contain the Wi-Fi password: no output, no diff
+- name: Wi-Fi profiles
+  ansible.builtin.template:
+    src: connection.nmconnection.j2
+    dest: "{{ network_connections_dir }}/ansible-{{ item | regex_replace('[^A-Za-z0-9._-]', '_') }}.nmconnection"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ network_wifi_ids }}"
+  vars:
+    network_connection: "{{ network_final.connections | selectattr('id', 'equalto', item) | first }}"
+  no_log: true
+  diff: false
+  notify: network reload connections
+
+- name: Load changed profiles now (before checking for duplicates)
+  ansible.builtin.meta: flush_handlers
+
+- name: All NetworkManager profiles
+  ansible.builtin.command: nmcli -t -f NAME,UUID connection show
+  register: network_profiles
+  changed_when: false
+  check_mode: false
+  when: network_nm_running
+
+# profiles with the same name but another uuid, e.g. created by the installer: delete them by hand
+# (warning: shown even with display_ok_hosts=false, counted as "ignored", the run continues)
+- name: Warning for other profiles with the name of a managed connection
+  ansible.builtin.assert:
+    that: >-
+      item.split(':')[0] not in network_ids
+      or item.split(':')[1] == ('network-' ~ item.split(':')[0]) | to_uuid
+    fail_msg: >-
+      WARNING network: NetworkManager has another profile '{{ item.split(':')[0] }}' (uuid {{ item.split(':')[1] }})
+      besides the managed one - delete it by hand if it is a leftover: nmcli connection delete {{ item.split(':')[1] }}
+    quiet: true
+  loop: "{{ network_profiles.stdout_lines | default([]) }}"
+  loop_control:
+    label: "{{ item.split(':')[0] }}"
+  when: network_nm_running
+  ignore_errors: true
